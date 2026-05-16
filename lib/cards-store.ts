@@ -6,6 +6,16 @@ import type {
   SourceType,
   StoredLearningCard
 } from "@/types/domain";
+import {
+  deleteLocalLearningCard,
+  getLocalLearningCard,
+  getLocalRecognitionCandidate,
+  listLocalLearningCards,
+  saveLocalLearningCard,
+  saveLocalRecognitionSession
+} from "@/lib/local-store";
+import { saveSourceAsset } from "@/lib/media-assets";
+import { canUseLocalStoreFallback } from "@/lib/env";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 type LearningCardRow = {
@@ -41,8 +51,13 @@ type RecognitionSessionRow = {
   created_at: string;
 };
 
-const memorySessions = new Map<string, RecognitionResult>();
-const memoryCards = new Map<string, StoredLearningCard>();
+function assertLocalStoreFallback(action: string) {
+  if (!canUseLocalStoreFallback()) {
+    throw new Error(
+      `Supabase is required to ${action} in production. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.`
+    );
+  }
+}
 
 function toStoredCard(row: LearningCardRow): StoredLearningCard {
   return {
@@ -73,6 +88,12 @@ function toStoredCard(row: LearningCardRow): StoredLearningCard {
     natural_sentence_patterns: Array.isArray(row.natural_sentence_patterns)
       ? row.natural_sentence_patterns
       : [],
+    is_mock:
+      typeof row.raw_ai_result === "object" &&
+      row.raw_ai_result !== null &&
+      "is_mock" in row.raw_ai_result
+        ? Boolean(row.raw_ai_result.is_mock)
+        : undefined,
     raw_ai_result: row.raw_ai_result,
     created_at: row.created_at,
     updated_at: row.updated_at
@@ -86,8 +107,8 @@ export async function saveRecognitionSession(
   const supabase = getSupabaseAdmin();
 
   if (!supabase) {
-    memorySessions.set(result.session_id, result);
-    return result.session_id;
+    assertLocalStoreFallback("save recognition sessions");
+    return saveLocalRecognitionSession(result);
   }
 
   const { error } = await supabase.from("recognition_sessions").insert({
@@ -100,7 +121,9 @@ export async function saveRecognitionSession(
   });
 
   if (error) {
-    throw new Error(error.message);
+    assertLocalStoreFallback("save recognition sessions");
+    console.warn(`Supabase recognition save failed, using local store: ${error.message}`);
+    return saveLocalRecognitionSession(result);
   }
 
   return result.session_id;
@@ -118,10 +141,8 @@ export async function getRecognitionCandidate({
   const supabase = getSupabaseAdmin();
 
   if (!supabase) {
-    const session = memorySessions.get(sessionId);
-    return session?.candidates.find(
-      (candidate) => candidate.candidate_id === candidateId
-    );
+    assertLocalStoreFallback("read recognition sessions");
+    return getLocalRecognitionCandidate({ sessionId, candidateId });
   }
 
   const { data, error } = await supabase
@@ -132,7 +153,13 @@ export async function getRecognitionCandidate({
     .single<RecognitionSessionRow>();
 
   if (error || !data) {
-    return undefined;
+    assertLocalStoreFallback("read recognition sessions");
+    console.warn(
+      `Supabase recognition lookup failed, using local store: ${
+        error?.message ?? "not found"
+      }`
+    );
+    return getLocalRecognitionCandidate({ sessionId, candidateId });
   }
 
   return data.candidates.find(
@@ -144,16 +171,19 @@ export async function saveLearningCard({
   anonUserId,
   mode,
   sourceType,
-  card
+  card,
+  sourceAssetDataUrl
 }: {
   anonUserId: string;
   mode: AppMode;
   sourceType: SourceType;
   card: LearningCard;
+  sourceAssetDataUrl?: string;
 }) {
   const supabase = getSupabaseAdmin();
 
   if (!supabase) {
+    assertLocalStoreFallback("save learning cards");
     const now = new Date().toISOString();
     const stored: StoredLearningCard = {
       ...card,
@@ -161,14 +191,23 @@ export async function saveLearningCard({
       anon_user_id: anonUserId,
       mode,
       source_type: sourceType,
-      source_asset_url: null,
+      source_asset_url: await saveSourceAsset({
+        anonUserId,
+        sourceType,
+        sourceAssetDataUrl
+      }),
       raw_ai_result: card,
       created_at: now,
       updated_at: now
     };
-    memoryCards.set(stored.id, stored);
-    return stored;
+    return saveLocalLearningCard(stored);
   }
+
+  const sourceAssetUrl = await saveSourceAsset({
+    anonUserId,
+    sourceType,
+    sourceAssetDataUrl
+  });
 
   const { data, error } = await supabase
     .from("learning_cards")
@@ -176,6 +215,7 @@ export async function saveLearningCard({
       anon_user_id: anonUserId,
       mode,
       source_type: sourceType,
+      source_asset_url: sourceAssetUrl,
       phrase_en: card.phrase_en,
       meaning_zh: card.meaning_zh,
       part_of_speech: card.part_of_speech,
@@ -192,7 +232,24 @@ export async function saveLearningCard({
     .single<LearningCardRow>();
 
   if (error || !data) {
-    throw new Error(error?.message ?? "Failed to save card");
+    assertLocalStoreFallback("save learning cards");
+    console.warn(
+      `Supabase card save failed, using local store: ${
+        error?.message ?? "missing saved row"
+      }`
+    );
+    const now = new Date().toISOString();
+    return saveLocalLearningCard({
+      ...card,
+      id: crypto.randomUUID(),
+      anon_user_id: anonUserId,
+      mode,
+      source_type: sourceType,
+      source_asset_url: sourceAssetUrl,
+      raw_ai_result: card,
+      created_at: now,
+      updated_at: now
+    });
   }
 
   return toStoredCard(data);
@@ -210,20 +267,8 @@ export async function listLearningCards({
   const supabase = getSupabaseAdmin();
 
   if (!supabase) {
-    return Array.from(memoryCards.values())
-      .filter((card) => card.anon_user_id === anonUserId)
-      .filter((card) => !mode || card.mode === mode)
-      .filter((card) => {
-        if (!query) {
-          return true;
-        }
-        const keyword = query.toLowerCase();
-        return (
-          card.phrase_en.toLowerCase().includes(keyword) ||
-          card.meaning_zh.includes(query)
-        );
-      })
-      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    assertLocalStoreFallback("list learning cards");
+    return listLocalLearningCards({ anonUserId, mode, query });
   }
 
   let request = supabase
@@ -243,7 +288,9 @@ export async function listLearningCards({
   const { data, error } = await request.returns<LearningCardRow[]>();
 
   if (error) {
-    throw new Error(error.message);
+    assertLocalStoreFallback("list learning cards");
+    console.warn(`Supabase card list failed, using local store: ${error.message}`);
+    return listLocalLearningCards({ anonUserId, mode, query });
   }
 
   return (data ?? []).map(toStoredCard);
@@ -259,8 +306,8 @@ export async function getLearningCard({
   const supabase = getSupabaseAdmin();
 
   if (!supabase) {
-    const card = memoryCards.get(id);
-    return card?.anon_user_id === anonUserId ? card : null;
+    assertLocalStoreFallback("read learning cards");
+    return getLocalLearningCard({ anonUserId, id });
   }
 
   const { data, error } = await supabase
@@ -271,7 +318,11 @@ export async function getLearningCard({
     .single<LearningCardRow>();
 
   if (error || !data) {
-    return null;
+    assertLocalStoreFallback("read learning cards");
+    console.warn(
+      `Supabase card lookup failed, using local store: ${error?.message ?? "not found"}`
+    );
+    return getLocalLearningCard({ anonUserId, id });
   }
 
   return toStoredCard(data);
@@ -287,11 +338,8 @@ export async function deleteLearningCard({
   const supabase = getSupabaseAdmin();
 
   if (!supabase) {
-    const card = memoryCards.get(id);
-    if (card?.anon_user_id === anonUserId) {
-      memoryCards.delete(id);
-    }
-    return;
+    assertLocalStoreFallback("delete learning cards");
+    return deleteLocalLearningCard({ anonUserId, id });
   }
 
   const { error } = await supabase
@@ -301,6 +349,8 @@ export async function deleteLearningCard({
     .eq("anon_user_id", anonUserId);
 
   if (error) {
-    throw new Error(error.message);
+    assertLocalStoreFallback("delete learning cards");
+    console.warn(`Supabase card delete failed, using local store: ${error.message}`);
+    return deleteLocalLearningCard({ anonUserId, id });
   }
 }

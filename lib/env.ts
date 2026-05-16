@@ -25,3 +25,7 @@ export function getAIProvider() {
 export function hasOpenAICompatibleEnv() {
   return Boolean(process.env.AI_BASE_URL && process.env.AI_API_KEY && process.env.AI_MODEL);
 }
+
+export function canUseLocalStoreFallback() {
+  return process.env.VERCEL !== "1";
+}

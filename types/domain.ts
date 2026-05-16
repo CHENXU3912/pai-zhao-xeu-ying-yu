@@ -30,6 +30,7 @@ export type RecognitionResult = {
   mode: AppMode;
   summary: string;
   candidates: RecognitionCandidate[];
+  is_mock?: boolean;
 };
 
 export type RelatedExpression = {
@@ -55,6 +56,7 @@ export type LearningCard = {
   confusables: Confusable[];
   usage_scenarios: string[];
   natural_sentence_patterns: string[];
+  is_mock?: boolean;
 };
 
 export type StoredLearningCard = LearningCard & {

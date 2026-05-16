@@ -5,6 +5,7 @@ import type {
   RecognitionCandidate,
   RecognitionResult
 } from "@/types/domain";
+import { assertLearningCard, assertRecognitionResult } from "@/lib/domain-guards";
 import { cardPrompt, recognitionPrompt } from "./prompts";
 import { cardJsonSchema, recognitionJsonSchema } from "./schemas";
 
@@ -115,12 +116,12 @@ export async function recognizeWithOpenAI({
     schemaName: "recognition_result"
   });
 
-  return {
+  return assertRecognitionResult({
     ...result,
     session_id: result.session_id || crypto.randomUUID(),
     mode,
     input_type: inputType
-  };
+  });
 }
 
 export async function generateCardWithOpenAI({
@@ -142,8 +143,8 @@ export async function generateCardWithOpenAI({
     schemaName: "learning_card"
   });
 
-  return {
+  return assertLearningCard({
     ...result,
     candidate_id: candidate.candidate_id
-  };
+  });
 }

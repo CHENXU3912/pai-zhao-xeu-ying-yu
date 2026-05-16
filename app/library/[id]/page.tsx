@@ -86,6 +86,7 @@ export default function CardDetailPage() {
               </button>
             }
             card={card}
+            imageUrl={card.source_asset_url}
           />
         ) : !loading ? (
           <div className="empty-state">没有找到这张词卡。</div>

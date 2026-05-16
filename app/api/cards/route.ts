@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { SourceType } from "@/types/domain";
 import { jsonError } from "@/lib/api";
 import { listLearningCards, saveLearningCard } from "@/lib/cards-store";
+import { assertLearningCard } from "@/lib/domain-guards";
 import { assertAnonUserId, parseAppMode } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -30,17 +31,16 @@ export async function POST(request: Request) {
     const anonUserId = assertAnonUserId(body.anonUserId);
     const mode = parseAppMode(body.mode);
     const sourceType = (body.sourceType === "video" ? "video" : "image") as SourceType;
-    const card = body.card;
-
-    if (typeof card !== "object" || card === null) {
-      throw new Error("card is required");
-    }
+    const card = assertLearningCard(body.card);
+    const sourceAssetDataUrl =
+      typeof body.sourceAssetDataUrl === "string" ? body.sourceAssetDataUrl : undefined;
 
     const saved = await saveLearningCard({
       anonUserId,
       mode,
       sourceType,
-      card: card as Parameters<typeof saveLearningCard>[0]["card"]
+      card,
+      sourceAssetDataUrl
     });
 
     return NextResponse.json(saved);

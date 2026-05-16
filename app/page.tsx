@@ -52,6 +52,15 @@ async function compressImage(file: File) {
   });
 }
 
+async function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("素材读取失败"));
+    reader.readAsDataURL(file);
+  });
+}
+
 async function extractVideoFrames(file: File, count = 4) {
   const video = document.createElement("video");
   const objectUrl = URL.createObjectURL(file);
@@ -126,6 +135,7 @@ export default function HomePage() {
   const [mode, setMode] = useState<AppMode>("life_english");
   const [sourceType, setSourceType] = useState<SourceType>("image");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [sourceAssetDataUrl, setSourceAssetDataUrl] = useState<string | null>(null);
   const [recognition, setRecognition] = useState<RecognitionResult | null>(null);
   const [selectedCandidate, setSelectedCandidate] =
     useState<RecognitionCandidate | null>(null);
@@ -151,12 +161,14 @@ export default function HomePage() {
     setCard(null);
     setSavedCard(null);
     setSourceType("image");
-    setPreviewUrl(URL.createObjectURL(file));
+    const compressedImage = await compressImage(file);
+    setPreviewUrl(URL.createObjectURL(compressedImage));
+    setSourceAssetDataUrl(await readFileAsDataUrl(compressedImage));
 
     const formData = new FormData();
     formData.append("anonUserId", anonUserId);
     formData.append("mode", mode);
-    formData.append("image", await compressImage(file));
+    formData.append("image", compressedImage);
 
     const response = await fetch("/api/recognize/image", {
       method: "POST",
@@ -171,7 +183,9 @@ export default function HomePage() {
     setRecognition(result);
     setSelectedCandidate(result.candidates[0] ?? null);
     setStatus(
-      result.candidates.length
+      result.is_mock
+        ? "当前是模拟识别结果：配置真实 AI 后会返回照片里的真实物品。"
+        : result.candidates.length
         ? "选一个最想学的词，生成贴纸卡。"
         : "没有识别到候选项，换个光线更好的照片试试。"
     );
@@ -185,9 +199,11 @@ export default function HomePage() {
     setCard(null);
     setSavedCard(null);
     setSourceType("video");
+    setSourceAssetDataUrl(null);
 
     const frames = await extractVideoFrames(file);
     setPreviewUrl(URL.createObjectURL(frames[0]));
+    setSourceAssetDataUrl(await readFileAsDataUrl(frames[0]));
     setStatus("正在推断动作表达...");
 
     const formData = new FormData();
@@ -207,6 +223,10 @@ export default function HomePage() {
     const result = (await response.json()) as RecognitionResult;
     setRecognition(result);
     setSelectedCandidate(result.candidates[0] ?? null);
+    if (result.is_mock) {
+      setStatus("当前是模拟识别结果：配置真实 AI 后会返回视频里的真实动作。");
+      return;
+    }
     setStatus("选一个动作表达，生成可以收藏的英语贴纸。");
   }
 
@@ -240,6 +260,10 @@ export default function HomePage() {
 
     const nextCard = (await response.json()) as LearningCard;
     setCard(nextCard);
+    if (nextCard.is_mock) {
+      setStatus("当前是模拟词卡：配置真实 AI 后会生成和识别结果匹配的真实内容。");
+      return;
+    }
     setStatus("贴纸已生成。可以播放发音，也可以放进词库。");
   }
 
@@ -260,7 +284,8 @@ export default function HomePage() {
         anonUserId,
         mode,
         sourceType,
-        card
+        card,
+        sourceAssetDataUrl
       })
     });
 

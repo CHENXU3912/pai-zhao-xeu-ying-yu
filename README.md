@@ -24,7 +24,7 @@ npm run dev
 
 打开 `http://localhost:3000`。
 
-没有配置环境变量时，应用会使用 mock provider 和内存存储，仍可跑通 Demo。
+没有配置环境变量时，应用会使用 mock provider 和 `.local-data` 本地存储，仍可跑通 Demo。
 
 ## 环境变量
 
@@ -39,6 +39,7 @@ AI_API_KEY=
 AI_MODEL=
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_MEDIA_BUCKET=learning-card-media
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
@@ -79,6 +80,9 @@ supabase/schema.sql
 
 第一版由后端 API 使用 `SUPABASE_SERVICE_ROLE_KEY` 写入数据库，前端不直接写库。
 
+如果要保存词卡照片或视频首帧，在 Supabase Storage 创建一个公开 bucket，默认名称为
+`learning-card-media`；如果使用其他名称，把 `SUPABASE_MEDIA_BUCKET` 改成对应 bucket。
+
 ## 验证
 
 ```bash
@@ -86,6 +90,10 @@ npm run lint
 npm run typecheck
 npm run build
 ```
+
+## 部署
+
+公网手机访问推荐使用 Vercel + Supabase，步骤见 `docs/vercel-deployment.md`。
 
 Windows PowerShell 如果拦截 `npm.ps1`，使用：
 

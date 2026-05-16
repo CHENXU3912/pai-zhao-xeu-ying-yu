@@ -385,6 +385,12 @@ a {
   font-weight: 800;
 }
 
+.mock-badge {
+  margin-left: 8px;
+  color: #7c3f00;
+  background: #fff0c2;
+}
+
 .learning-card {
   padding: 18px;
 }

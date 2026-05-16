@@ -5,6 +5,7 @@ import type {
   RecognitionCandidate,
   RecognitionResult
 } from "@/types/domain";
+import { assertLearningCard, assertRecognitionResult } from "@/lib/domain-guards";
 import { cardPrompt, recognitionPrompt } from "./prompts";
 
 type ChatMessageContent =
@@ -136,12 +137,12 @@ export async function recognizeWithOpenAICompatible({
     ]
   });
 
-  return {
+  return assertRecognitionResult({
     ...result,
     session_id: result.session_id || crypto.randomUUID(),
     input_type: inputType,
     mode
-  };
+  });
 }
 
 export async function generateCardWithOpenAICompatible({
@@ -186,8 +187,8 @@ export async function generateCardWithOpenAICompatible({
     ]
   });
 
-  return {
+  return assertLearningCard({
     ...result,
     candidate_id: candidate.candidate_id
-  };
+  });
 }

@@ -3,18 +3,18 @@ import type { RecognitionCandidate } from "@/types/domain";
 import { jsonError } from "@/lib/api";
 import { generateLearningCard } from "@/lib/ai/provider";
 import { getRecognitionCandidate } from "@/lib/cards-store";
+import { assertRecognitionCandidate } from "@/lib/domain-guards";
 import { assertAnonUserId, parseAppMode } from "@/lib/validation";
 
 export const runtime = "nodejs";
 
 function isCandidate(value: unknown): value is RecognitionCandidate {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "candidate_id" in value &&
-    "label_en" in value &&
-    "label_zh" in value
-  );
+  try {
+    assertRecognitionCandidate(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function POST(request: Request) {

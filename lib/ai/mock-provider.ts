@@ -85,7 +85,8 @@ export function mockRecognize(mode: AppMode, inputType: InputType): RecognitionR
       mode === "sports_action"
         ? "A sports or training scene with learnable action phrases."
         : "An everyday scene with objects suitable for English learning.",
-    candidates: mode === "sports_action" ? sportsCandidates() : lifeCandidates()
+    candidates: mode === "sports_action" ? sportsCandidates() : lifeCandidates(),
+    is_mock: true
   };
 }
 
@@ -121,7 +122,8 @@ export function mockCard(mode: AppMode, candidate: RecognitionCandidate): Learni
         "Do ten squats.",
         "Keep your knees in line with your toes.",
         "Lower your hips and stand back up."
-      ]
+      ],
+      is_mock: true
     };
   }
 
@@ -151,6 +153,7 @@ export function mockCard(mode: AppMode, candidate: RecognitionCandidate): Learni
       "Can I refill my water bottle?",
       "I left my water bottle on the desk.",
       "Bring a water bottle to practice."
-    ]
+    ],
+    is_mock: true
   };
 }

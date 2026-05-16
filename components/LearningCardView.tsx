@@ -26,6 +26,7 @@ export function LearningCardView({ card, actions, compact = false, imageUrl }: P
         <div className="word-head">
           <div>
             <span className="eyebrow">Word sticker</span>
+            {card.is_mock ? <span className="badge mock-badge">模拟内容</span> : null}
             <h2>{card.phrase_en}</h2>
             <div className="ipa">
               {card.ipa} · {card.part_of_speech}
